@@ -1,0 +1,58 @@
+{
+  "name": "stepwise",
+  "displayName": "Stepwise — BDD/Gherkin Support",
+  "description": "PyCharm-inspired BDD support for VS Code: diagnostics, go-to-definition, and completion for Gherkin feature files backed by pytest-bdd step definitions.",
+  "version": "0.1.0",
+  "publisher": "stepwise",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:gherkin"
+  ],
+  "main": "./out/client/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gherkin",
+        "aliases": [
+          "Gherkin",
+          "Feature"
+        ],
+        "extensions": [
+          ".feature"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gherkin",
+        "scopeName": "text.gherkin.feature",
+        "path": "./syntaxes/gherkin.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "build": "npm run compile",
+    "clean": "rimraf out"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11",
+    "vscode-languageserver-protocol": "^3.17.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.82.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  }
+}

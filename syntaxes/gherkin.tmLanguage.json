@@ -1,0 +1,186 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gherkin",
+  "scopeName": "text.gherkin.feature",
+  "fileTypes": ["feature"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#tag" },
+    { "include": "#feature_block" },
+    { "include": "#rule_block" },
+    { "include": "#scenario_block" },
+    { "include": "#examples_block" },
+    { "include": "#background_block" },
+    { "include": "#step_line" },
+    { "include": "#docstring_backtick" },
+    { "include": "#docstring_triple_quote" },
+    { "include": "#table_row" }
+  ],
+  "repository": {
+
+    "comment": {
+      "name": "comment.line.number-sign.gherkin",
+      "match": "^\\s*(#.*)$",
+      "captures": {
+        "1": { "name": "comment.line.number-sign.gherkin" }
+      }
+    },
+
+    "tag": {
+      "name": "entity.name.tag.gherkin",
+      "match": "@[\\w.-]+"
+    },
+
+    "feature_block": {
+      "comment": "Feature: headline",
+      "match": "^(\\s*)(Feature)(\\s*:)(.*)",
+      "captures": {
+        "2": { "name": "keyword.control.feature.gherkin" },
+        "3": { "name": "punctuation.separator.key-value.gherkin" },
+        "4": { "name": "entity.name.section.gherkin" }
+      }
+    },
+
+    "rule_block": {
+      "comment": "Rule: headline",
+      "match": "^(\\s*)(Rule)(\\s*:)(.*)",
+      "captures": {
+        "2": { "name": "keyword.control.rule.gherkin" },
+        "3": { "name": "punctuation.separator.key-value.gherkin" },
+        "4": { "name": "entity.name.section.gherkin" }
+      }
+    },
+
+    "background_block": {
+      "comment": "Background: headline",
+      "match": "^(\\s*)(Background)(\\s*:)(.*)",
+      "captures": {
+        "2": { "name": "keyword.control.background.gherkin" },
+        "3": { "name": "punctuation.separator.key-value.gherkin" },
+        "4": { "name": "entity.name.section.gherkin" }
+      }
+    },
+
+    "scenario_block": {
+      "comment": "Scenario / Scenario Outline / Example headline",
+      "match": "^(\\s*)(Scenario Outline|Scenario Template|Scenario|Example)(\\s*:)(.*)",
+      "captures": {
+        "2": { "name": "keyword.control.scenario.gherkin" },
+        "3": { "name": "punctuation.separator.key-value.gherkin" },
+        "4": { "name": "entity.name.section.gherkin" }
+      }
+    },
+
+    "examples_block": {
+      "comment": "Examples / Scenarios table header",
+      "match": "^(\\s*)(Examples|Scenarios)(\\s*:)(.*)",
+      "captures": {
+        "2": { "name": "keyword.control.examples.gherkin" },
+        "3": { "name": "punctuation.separator.key-value.gherkin" },
+        "4": { "name": "entity.name.section.gherkin" }
+      }
+    },
+
+    "step_line": {
+      "comment": "A Given / When / Then / And / But step",
+      "begin": "^(\\s*)(Given|When|Then|And|But)(\\s+)",
+      "beginCaptures": {
+        "2": { "name": "keyword.operator.step.gherkin" }
+      },
+      "end": "$",
+      "patterns": [
+        { "include": "#step_docstring_inline" },
+        { "include": "#step_param_angle" },
+        { "include": "#step_param_brace" },
+        { "include": "#step_param_quoted_double" },
+        { "include": "#step_param_quoted_single" }
+      ]
+    },
+
+    "step_param_quoted_double": {
+      "comment": "Double-quoted parameter inside a step",
+      "name": "string.quoted.double.step-param.gherkin",
+      "match": "\"[^\"]*\""
+    },
+
+    "step_param_quoted_single": {
+      "comment": "Single-quoted parameter inside a step",
+      "name": "string.quoted.single.step-param.gherkin",
+      "match": "'[^']*'"
+    },
+
+    "step_param_angle": {
+      "comment": "<Scenario Outline placeholder>",
+      "name": "variable.other.placeholder.gherkin",
+      "match": "<[^>]+>"
+    },
+
+    "step_param_brace": {
+      "comment": "{pytest-bdd parameter}",
+      "name": "variable.parameter.brace.gherkin",
+      "match": "\\{[^}]+\\}"
+    },
+
+    "step_docstring_inline": {
+      "comment": "Inline docstring reference (should not appear, kept for safety)",
+      "name": "string.other.gherkin",
+      "match": "\"\"\".*\"\"\""
+    },
+
+    "docstring_triple_quote": {
+      "comment": "Triple-quoted docstring block (Python-style)",
+      "name": "string.unquoted.docstring.gherkin",
+      "begin": "^(\\s*)(\"\"\")(\\w*)",
+      "end": "^(\\s*)(\"\"\")",
+      "beginCaptures": {
+        "2": { "name": "punctuation.definition.string.begin.gherkin" },
+        "3": { "name": "storage.type.docstring.content-type.gherkin" }
+      },
+      "endCaptures": {
+        "2": { "name": "punctuation.definition.string.end.gherkin" }
+      },
+      "patterns": [
+        { "include": "#step_param_angle" }
+      ]
+    },
+
+    "docstring_backtick": {
+      "comment": "Back-tick docstring block (alternative Gherkin syntax)",
+      "name": "string.unquoted.docstring.backtick.gherkin",
+      "begin": "^(\\s*)(```)(\\w*)",
+      "end": "^(\\s*)(```)",
+      "beginCaptures": {
+        "2": { "name": "punctuation.definition.string.begin.gherkin" },
+        "3": { "name": "storage.type.docstring.content-type.gherkin" }
+      },
+      "endCaptures": {
+        "2": { "name": "punctuation.definition.string.end.gherkin" }
+      },
+      "patterns": [
+        { "include": "#step_param_angle" }
+      ]
+    },
+
+    "table_row": {
+      "comment": "Data table row  |cell|cell|",
+      "name": "meta.table.row.gherkin",
+      "match": "^\\s*\\|(.*)\\|\\s*$",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "name": "punctuation.separator.table-cell.gherkin",
+              "match": "\\|"
+            },
+            { "include": "#step_param_angle" },
+            {
+              "name": "string.other.table-cell.gherkin",
+              "match": "[^|]+"
+            }
+          ]
+        }
+      }
+    }
+
+  }
+}
