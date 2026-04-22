@@ -28,9 +28,11 @@ import {
   CompletionItemKind,
   TextDocumentPositionParams,
   DefinitionParams,
-  Location,
+  LocationLink,
   Range,
   WatchKind,
+  SemanticTokens,
+  SemanticTokensParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -52,6 +54,13 @@ let stepDefinitions: StepDefinition[] = [];
 
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
+
+// ─── Semantic token legend ────────────────────────────────────────────────────
+// Index 0: "stepResolved" — applied to step text that has a matching definition.
+const TOKEN_LEGEND = {
+  tokenTypes: ['stepResolved'],
+  tokenModifiers: [] as string[],
+};
 
 // ─── URI / path helpers ───────────────────────────────────────────────────────
 
@@ -221,10 +230,12 @@ async function refreshStepDefinitions(): Promise<void> {
     `[stepwise] Loaded ${stepDefinitions.length} step definition(s).`
   );
 
-  // Re-validate all currently open feature files
+  // Re-validate all currently open feature files and refresh semantic colours
   for (const doc of documents.all()) {
     validateDocument(doc);
   }
+  // Ask the client to re-request semantic tokens for all open documents
+  connection.languages.semanticTokens.refresh();
 }
 
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
@@ -283,6 +294,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         triggerCharacters: [' '],
       },
       definitionProvider: true,
+      semanticTokensProvider: {
+        legend: TOKEN_LEGEND,
+        range: false,
+        full: true,
+      },
     },
     serverInfo: {
       name: 'stepwise',
@@ -320,7 +336,7 @@ connection.onDidChangeWatchedFiles(async (params) => {
 
 // ─── Go-to-definition ─────────────────────────────────────────────────────────
 
-connection.onDefinition((params: DefinitionParams): Location | null => {
+connection.onDefinition((params: DefinitionParams): LocationLink[] | null => {
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return null;
 
@@ -336,12 +352,65 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
   const def = matchStep(parsed.text, stepDefinitions);
   if (!def) return null;
 
+  // Highlight the entire step phrase (everything after the keyword) when
+  // the user Ctrl+hovers or Ctrl+clicks, not just the word under the cursor.
+  const originSelectionRange: Range = {
+    start: { line: params.position.line, character: parsed.textStart },
+    end:   { line: params.position.line, character: parsed.textStart + parsed.text.length },
+  };
+
   // line in StepDefinition is 1-based; LSP uses 0-based
   const targetLine = Math.max(0, def.line - 1);
-  return Location.create(pathToUri(def.file), {
-    start: { line: targetLine, character: 0 },
-    end: { line: targetLine, character: 0 },
-  });
+  const targetPos = { line: targetLine, character: 0 };
+
+  return [{
+    originSelectionRange,
+    targetUri: pathToUri(def.file),
+    targetRange: { start: targetPos, end: targetPos },
+    targetSelectionRange: { start: targetPos, end: targetPos },
+  }];
+});
+
+// ─── Semantic tokens ──────────────────────────────────────────────────────────
+//
+// For every step line in a feature file whose text matches a known step
+// definition, we emit a "stepResolved" semantic token covering the step text
+// (i.e. everything after the Given/When/Then keyword).  The VS Code theme will
+// colour it according to the scope mapping in package.json
+// (contributes.semanticTokenScopes → entity.name.function).
+
+connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticTokens => {
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc || !doc.uri.endsWith('.feature')) {
+    return { data: [] };
+  }
+
+  const data: number[] = [];
+  const lines = doc.getText().split('\n');
+  let prevLine = 0;
+  let prevChar = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = parseStepLine(lines[i]);
+    if (!parsed) continue;
+
+    const match = matchStep(parsed.text, stepDefinitions);
+    if (!match) continue;
+
+    // Semantic token data is delta-encoded: [Δline, Δchar, length, type, mods]
+    const deltaLine = i - prevLine;
+    // deltaChar is relative to the previous token only when on the same line
+    const deltaChar = deltaLine === 0
+      ? parsed.textStart - prevChar
+      : parsed.textStart;
+
+    data.push(deltaLine, deltaChar, parsed.text.length, 0 /* stepResolved */, 0);
+
+    prevLine = i;
+    prevChar = parsed.textStart;
+  }
+
+  return { data };
 });
 
 // ─── Completion ───────────────────────────────────────────────────────────────

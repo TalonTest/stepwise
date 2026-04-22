@@ -57,6 +57,12 @@ let workspaceFolderPaths = [];
 let stepDefinitions = [];
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
+// ─── Semantic token legend ────────────────────────────────────────────────────
+// Index 0: "stepResolved" — applied to step text that has a matching definition.
+const TOKEN_LEGEND = {
+    tokenTypes: ['stepResolved'],
+    tokenModifiers: [],
+};
 // ─── URI / path helpers ───────────────────────────────────────────────────────
 /** Convert a `file://` URI to a local file-system path. */
 function uriToPath(uri) {
@@ -199,10 +205,12 @@ async function refreshStepDefinitions() {
     connection.console.log(`[stepwise] Scanning ${allPyFiles.length} Python file(s) for step definitions…`);
     stepDefinitions = await runStepParser(allPyFiles);
     connection.console.log(`[stepwise] Loaded ${stepDefinitions.length} step definition(s).`);
-    // Re-validate all currently open feature files
+    // Re-validate all currently open feature files and refresh semantic colours
     for (const doc of documents.all()) {
         validateDocument(doc);
     }
+    // Ask the client to re-request semantic tokens for all open documents
+    connection.languages.semanticTokens.refresh();
 }
 // ─── Diagnostics ──────────────────────────────────────────────────────────────
 function validateDocument(doc) {
@@ -255,6 +263,11 @@ connection.onInitialize((params) => {
                 triggerCharacters: [' '],
             },
             definitionProvider: true,
+            semanticTokensProvider: {
+                legend: TOKEN_LEGEND,
+                range: false,
+                full: true,
+            },
         },
         serverInfo: {
             name: 'stepwise',
@@ -300,12 +313,56 @@ connection.onDefinition((params) => {
     const def = (0, stepMatcher_1.matchStep)(parsed.text, stepDefinitions);
     if (!def)
         return null;
+    // Highlight the entire step phrase (everything after the keyword) when
+    // the user Ctrl+hovers or Ctrl+clicks, not just the word under the cursor.
+    const originSelectionRange = {
+        start: { line: params.position.line, character: parsed.textStart },
+        end: { line: params.position.line, character: parsed.textStart + parsed.text.length },
+    };
     // line in StepDefinition is 1-based; LSP uses 0-based
     const targetLine = Math.max(0, def.line - 1);
-    return node_1.Location.create(pathToUri(def.file), {
-        start: { line: targetLine, character: 0 },
-        end: { line: targetLine, character: 0 },
-    });
+    const targetPos = { line: targetLine, character: 0 };
+    return [{
+            originSelectionRange,
+            targetUri: pathToUri(def.file),
+            targetRange: { start: targetPos, end: targetPos },
+            targetSelectionRange: { start: targetPos, end: targetPos },
+        }];
+});
+// ─── Semantic tokens ──────────────────────────────────────────────────────────
+//
+// For every step line in a feature file whose text matches a known step
+// definition, we emit a "stepResolved" semantic token covering the step text
+// (i.e. everything after the Given/When/Then keyword).  The VS Code theme will
+// colour it according to the scope mapping in package.json
+// (contributes.semanticTokenScopes → entity.name.function).
+connection.languages.semanticTokens.on((params) => {
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc || !doc.uri.endsWith('.feature')) {
+        return { data: [] };
+    }
+    const data = [];
+    const lines = doc.getText().split('\n');
+    let prevLine = 0;
+    let prevChar = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const parsed = (0, stepMatcher_1.parseStepLine)(lines[i]);
+        if (!parsed)
+            continue;
+        const match = (0, stepMatcher_1.matchStep)(parsed.text, stepDefinitions);
+        if (!match)
+            continue;
+        // Semantic token data is delta-encoded: [Δline, Δchar, length, type, mods]
+        const deltaLine = i - prevLine;
+        // deltaChar is relative to the previous token only when on the same line
+        const deltaChar = deltaLine === 0
+            ? parsed.textStart - prevChar
+            : parsed.textStart;
+        data.push(deltaLine, deltaChar, parsed.text.length, 0 /* stepResolved */, 0);
+        prevLine = i;
+        prevChar = parsed.textStart;
+    }
+    return { data };
 });
 // ─── Completion ───────────────────────────────────────────────────────────────
 connection.onCompletion((params) => {

@@ -35,6 +35,13 @@
         "scopeName": "text.gherkin.feature",
         "path": "./syntaxes/gherkin.tmLanguage.json"
       }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "stepResolved": ["entity.name.function"]
+        }
+      }
     ]
   },
   "scripts": {
