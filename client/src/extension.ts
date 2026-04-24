@@ -41,6 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.workspace.createFileSystemWatcher('**/*.feature'),
         vscode.workspace.createFileSystemWatcher('**/*.py'),
       ],
+      configurationSection: 'stepwise',
     },
   };
 

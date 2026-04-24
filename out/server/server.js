@@ -26,23 +26,13 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
@@ -50,6 +40,7 @@ const cp = __importStar(require("child_process"));
 const node_1 = require("vscode-languageserver/node");
 const vscode_languageserver_textdocument_1 = require("vscode-languageserver-textdocument");
 const stepMatcher_1 = require("./stepMatcher");
+const formatter_1 = require("./formatter");
 // ─── Globals ──────────────────────────────────────────────────────────────────
 const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
@@ -57,6 +48,13 @@ let workspaceFolderPaths = [];
 let stepDefinitions = [];
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
+async function getConfig() {
+    const raw = await connection.workspace.getConfiguration('stepwise');
+    return {
+        stepDefinitionPaths: Array.isArray(raw?.stepDefinitionPaths) ? raw.stepDefinitionPaths : [],
+        pythonPath: typeof raw?.pythonPath === 'string' ? raw.pythonPath.trim() : '',
+    };
+}
 // ─── Semantic token legend ────────────────────────────────────────────────────
 // Index 0: "stepResolved" — applied to step text that has a matching definition.
 const TOKEN_LEGEND = {
@@ -122,16 +120,16 @@ function findPythonFiles(root) {
     return results;
 }
 // ─── Python subprocess ────────────────────────────────────────────────────────
-/** Try to find a usable Python 3 interpreter on PATH. */
-function findPython() {
-    for (const candidate of ['python3', 'python']) {
+/** Try to find a usable Python 3 interpreter. Uses `configured` path if provided. */
+function findPython(configured) {
+    const candidates = configured ? [configured, 'python3', 'python'] : ['python3', 'python'];
+    for (const candidate of candidates) {
         try {
             const result = cp.spawnSync(candidate, ['--version'], {
                 encoding: 'utf8',
                 timeout: 3000,
             });
             if (result.status === 0) {
-                // Confirm it is Python 3
                 const out = (result.stdout || result.stderr || '').trim();
                 if (out.startsWith('Python 3')) {
                     return candidate;
@@ -142,7 +140,7 @@ function findPython() {
             // not found
         }
     }
-    return 'python3'; // best guess
+    return configured || 'python3'; // best guess
 }
 /** Absolute path to the bundled step_parser.py. */
 function getParserScriptPath() {
@@ -153,7 +151,7 @@ function getParserScriptPath() {
  * Invoke step_parser.py with a JSON array of Python file paths on stdin.
  * Returns a parsed array of StepDefinition objects.
  */
-function runStepParser(pythonFiles) {
+function runStepParser(pythonFiles, pythonPath) {
     return new Promise((resolve) => {
         if (pythonFiles.length === 0) {
             resolve([]);
@@ -165,7 +163,7 @@ function runStepParser(pythonFiles) {
             resolve([]);
             return;
         }
-        const python = findPython();
+        const python = findPython(pythonPath);
         const proc = cp.spawn(python, [scriptPath], {
             stdio: ['pipe', 'pipe', 'pipe'],
         });
@@ -198,12 +196,32 @@ function runStepParser(pythonFiles) {
 }
 // ─── Index management ─────────────────────────────────────────────────────────
 async function refreshStepDefinitions() {
+    const config = await getConfig();
+    // Resolve search roots: configured paths (relative to each workspace root, or
+    // absolute) take priority; fall back to the workspace roots themselves.
+    const searchRoots = [];
+    if (config.stepDefinitionPaths.length > 0) {
+        for (const folder of workspaceFolderPaths) {
+            for (const p of config.stepDefinitionPaths) {
+                const resolved = path.isAbsolute(p) ? p : path.join(folder, p);
+                if (fs.existsSync(resolved)) {
+                    searchRoots.push(resolved);
+                }
+                else {
+                    connection.console.warn(`[stepwise] stepDefinitionPaths entry not found: ${resolved}`);
+                }
+            }
+        }
+    }
+    else {
+        searchRoots.push(...workspaceFolderPaths);
+    }
     const allPyFiles = [];
-    for (const folder of workspaceFolderPaths) {
-        allPyFiles.push(...findPythonFiles(folder));
+    for (const root of searchRoots) {
+        allPyFiles.push(...findPythonFiles(root));
     }
     connection.console.log(`[stepwise] Scanning ${allPyFiles.length} Python file(s) for step definitions…`);
-    stepDefinitions = await runStepParser(allPyFiles);
+    stepDefinitions = await runStepParser(allPyFiles, config.pythonPath || undefined);
     connection.console.log(`[stepwise] Loaded ${stepDefinitions.length} step definition(s).`);
     // Re-validate all currently open feature files and refresh semantic colours
     for (const doc of documents.all()) {
@@ -268,6 +286,7 @@ connection.onInitialize((params) => {
                 range: false,
                 full: true,
             },
+            documentFormattingProvider: true,
         },
         serverInfo: {
             name: 'stepwise',
@@ -288,6 +307,13 @@ connection.onInitialized(async () => {
             ],
         });
     }
+    // Re-index whenever the user changes stepwise settings
+    await connection.client.register(node_1.DidChangeConfigurationNotification.type, {
+        section: 'stepwise',
+    });
+    await refreshStepDefinitions();
+});
+connection.onDidChangeConfiguration(async () => {
     await refreshStepDefinitions();
 });
 // ─── File watcher ─────────────────────────────────────────────────────────────
@@ -396,6 +422,19 @@ connection.onCompletion((params) => {
             insertText: def.pattern,
         };
     });
+});
+// ─── Formatting ───────────────────────────────────────────────────────────────
+connection.onDocumentFormatting((params) => {
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc || !doc.uri.endsWith('.feature'))
+        return null;
+    const original = doc.getText();
+    const formatted = (0, formatter_1.formatDocument)(original, params.options.tabSize, params.options.insertSpaces);
+    if (formatted === original)
+        return [];
+    return [
+        node_1.TextEdit.replace({ start: { line: 0, character: 0 }, end: doc.positionAt(original.length) }, formatted),
+    ];
 });
 // ─── Document listeners ───────────────────────────────────────────────────────
 documents.onDidChangeContent((change) => {

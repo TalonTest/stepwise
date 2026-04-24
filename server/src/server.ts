@@ -33,6 +33,9 @@ import {
   WatchKind,
   SemanticTokens,
   SemanticTokensParams,
+  DidChangeConfigurationNotification,
+  DocumentFormattingParams,
+  TextEdit,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -44,6 +47,8 @@ import {
   filterDefinitions,
 } from './stepMatcher';
 
+import { formatDocument } from './formatter';
+
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
 const connection = createConnection(ProposedFeatures.all);
@@ -54,6 +59,21 @@ let stepDefinitions: StepDefinition[] = [];
 
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
+
+// ─── Configuration ────────────────────────────────────────────────────────────
+
+interface StepwiseConfig {
+  stepDefinitionPaths: string[];
+  pythonPath: string;
+}
+
+async function getConfig(): Promise<StepwiseConfig> {
+  const raw = await connection.workspace.getConfiguration('stepwise');
+  return {
+    stepDefinitionPaths: Array.isArray(raw?.stepDefinitionPaths) ? raw.stepDefinitionPaths : [],
+    pythonPath: typeof raw?.pythonPath === 'string' ? raw.pythonPath.trim() : '',
+  };
+}
 
 // ─── Semantic token legend ────────────────────────────────────────────────────
 // Index 0: "stepResolved" — applied to step text that has a matching definition.
@@ -127,16 +147,16 @@ function findPythonFiles(root: string): string[] {
 
 // ─── Python subprocess ────────────────────────────────────────────────────────
 
-/** Try to find a usable Python 3 interpreter on PATH. */
-function findPython(): string {
-  for (const candidate of ['python3', 'python']) {
+/** Try to find a usable Python 3 interpreter. Uses `configured` path if provided. */
+function findPython(configured?: string): string {
+  const candidates = configured ? [configured, 'python3', 'python'] : ['python3', 'python'];
+  for (const candidate of candidates) {
     try {
       const result = cp.spawnSync(candidate, ['--version'], {
         encoding: 'utf8',
         timeout: 3000,
       });
       if (result.status === 0) {
-        // Confirm it is Python 3
         const out = (result.stdout || result.stderr || '').trim();
         if (out.startsWith('Python 3')) {
           return candidate;
@@ -146,7 +166,7 @@ function findPython(): string {
       // not found
     }
   }
-  return 'python3'; // best guess
+  return configured || 'python3'; // best guess
 }
 
 /** Absolute path to the bundled step_parser.py. */
@@ -159,7 +179,7 @@ function getParserScriptPath(): string {
  * Invoke step_parser.py with a JSON array of Python file paths on stdin.
  * Returns a parsed array of StepDefinition objects.
  */
-function runStepParser(pythonFiles: string[]): Promise<StepDefinition[]> {
+function runStepParser(pythonFiles: string[], pythonPath?: string): Promise<StepDefinition[]> {
   return new Promise((resolve) => {
     if (pythonFiles.length === 0) {
       resolve([]);
@@ -174,7 +194,7 @@ function runStepParser(pythonFiles: string[]): Promise<StepDefinition[]> {
       return;
     }
 
-    const python = findPython();
+    const python = findPython(pythonPath);
     const proc = cp.spawn(python, [scriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -215,16 +235,36 @@ function runStepParser(pythonFiles: string[]): Promise<StepDefinition[]> {
 // ─── Index management ─────────────────────────────────────────────────────────
 
 async function refreshStepDefinitions(): Promise<void> {
+  const config = await getConfig();
+
+  // Resolve search roots: configured paths (relative to each workspace root, or
+  // absolute) take priority; fall back to the workspace roots themselves.
+  const searchRoots: string[] = [];
+  if (config.stepDefinitionPaths.length > 0) {
+    for (const folder of workspaceFolderPaths) {
+      for (const p of config.stepDefinitionPaths) {
+        const resolved = path.isAbsolute(p) ? p : path.join(folder, p);
+        if (fs.existsSync(resolved)) {
+          searchRoots.push(resolved);
+        } else {
+          connection.console.warn(`[stepwise] stepDefinitionPaths entry not found: ${resolved}`);
+        }
+      }
+    }
+  } else {
+    searchRoots.push(...workspaceFolderPaths);
+  }
+
   const allPyFiles: string[] = [];
-  for (const folder of workspaceFolderPaths) {
-    allPyFiles.push(...findPythonFiles(folder));
+  for (const root of searchRoots) {
+    allPyFiles.push(...findPythonFiles(root));
   }
 
   connection.console.log(
     `[stepwise] Scanning ${allPyFiles.length} Python file(s) for step definitions…`
   );
 
-  stepDefinitions = await runStepParser(allPyFiles);
+  stepDefinitions = await runStepParser(allPyFiles, config.pythonPath || undefined);
 
   connection.console.log(
     `[stepwise] Loaded ${stepDefinitions.length} step definition(s).`
@@ -299,6 +339,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         range: false,
         full: true,
       },
+      documentFormattingProvider: true,
     },
     serverInfo: {
       name: 'stepwise',
@@ -322,6 +363,15 @@ connection.onInitialized(async () => {
     });
   }
 
+  // Re-index whenever the user changes stepwise settings
+  await connection.client.register(DidChangeConfigurationNotification.type, {
+    section: 'stepwise',
+  });
+
+  await refreshStepDefinitions();
+});
+
+connection.onDidChangeConfiguration(async () => {
   await refreshStepDefinitions();
 });
 
@@ -448,6 +498,29 @@ connection.onCompletion((params: TextDocumentPositionParams): CompletionItem[] =
       insertText: def.pattern,
     };
   });
+});
+
+// ─── Formatting ───────────────────────────────────────────────────────────────
+
+connection.onDocumentFormatting((params: DocumentFormattingParams): TextEdit[] | null => {
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc || !doc.uri.endsWith('.feature')) return null;
+
+  const original  = doc.getText();
+  const formatted = formatDocument(
+    original,
+    params.options.tabSize,
+    params.options.insertSpaces,
+  );
+
+  if (formatted === original) return [];
+
+  return [
+    TextEdit.replace(
+      { start: { line: 0, character: 0 }, end: doc.positionAt(original.length) },
+      formatted,
+    ),
+  ];
 });
 
 // ─── Document listeners ───────────────────────────────────────────────────────

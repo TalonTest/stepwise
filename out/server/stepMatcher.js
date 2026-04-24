@@ -9,26 +9,23 @@
  *  - Parsing a Gherkin step line into its keyword + text parts.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.patternToRegex = patternToRegex;
-exports.matchStep = matchStep;
-exports.parseStepLine = parseStepLine;
-exports.filterDefinitions = filterDefinitions;
+exports.filterDefinitions = exports.parseStepLine = exports.matchStep = exports.patternToRegex = void 0;
 // ─── Pattern → RegExp conversion ──────────────────────────────────────────────
 /**
  * Format specifier → capturing-group regex fragment.
  * Matches the pytest-bdd / parse library type codes.
  */
 const FORMAT_MAP = {
-    d: '(\\d+)', // integer
-    D: '(\\D+)', // non-digit
-    f: '([-+]?\\d*\\.\\d+)', // float
-    e: '([-+]?\\d*\\.?\\d+[eE][-+]?\\d+)', // scientific
-    g: '([-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)', // general number
-    w: '(\\w+)', // word (letters/digits/underscore)
-    l: '([a-z]+)', // lower-case letters
-    u: '([A-Z]+)', // upper-case letters
-    s: '(\\S+)', // non-whitespace token
-    S: '(.+)', // any string including spaces (greedy)
+    d: '(\\d+)',
+    D: '(\\D+)',
+    f: '([-+]?\\d*\\.\\d+)',
+    e: '([-+]?\\d*\\.?\\d+[eE][-+]?\\d+)',
+    g: '([-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)',
+    w: '(\\w+)',
+    l: '([a-z]+)',
+    u: '([A-Z]+)',
+    s: '(\\S+)',
+    S: '(.+)',
     n: '(\\d+(?:,\\d+)*)', // number with optional thousands separators
 };
 /**
@@ -80,6 +77,7 @@ function patternToRegex(pattern) {
     // but mostly we match step text which is already stripped of the keyword.
     return new RegExp('^' + regexStr + '$', 'i');
 }
+exports.patternToRegex = patternToRegex;
 // ─── Step matching ─────────────────────────────────────────────────────────────
 /**
  * Try to match `stepText` (the part of the Gherkin line after the keyword)
@@ -102,6 +100,7 @@ function matchStep(stepText, definitions) {
     }
     return undefined;
 }
+exports.matchStep = matchStep;
 // ─── Gherkin line parsing ──────────────────────────────────────────────────────
 const STEP_KEYWORD_RE = /^(\s*)(Given|When|Then|And|But)(\s+)(.+)$/i;
 /**
@@ -123,6 +122,7 @@ function parseStepLine(line) {
         textStart: indent.length + keyword.length + space.length,
     };
 }
+exports.parseStepLine = parseStepLine;
 // ─── Completion helpers ────────────────────────────────────────────────────────
 /**
  * Filter `definitions` whose patterns contain `query` as a substring
@@ -140,4 +140,5 @@ function filterDefinitions(query, definitions, limit = 50) {
     }
     return results;
 }
+exports.filterDefinitions = filterDefinitions;
 //# sourceMappingURL=stepMatcher.js.map
