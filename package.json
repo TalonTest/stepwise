@@ -41,6 +41,9 @@
         "scopes": {
           "stepResolved": [
             "entity.name.function"
+          ],
+          "keyword": [
+            "keyword.control"
           ]
         }
       }

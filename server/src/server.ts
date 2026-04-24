@@ -76,9 +76,10 @@ async function getConfig(): Promise<StepwiseConfig> {
 }
 
 // ─── Semantic token legend ────────────────────────────────────────────────────
-// Index 0: "stepResolved" — applied to step text that has a matching definition.
+// Index 0: "stepResolved" — step text with a matching definition.
+// Index 1: "keyword"      — Given / When / Then / And / But keyword.
 const TOKEN_LEGEND = {
-  tokenTypes: ['stepResolved'],
+  tokenTypes: ['stepResolved', 'keyword'],
   tokenModifiers: [] as string[],
 };
 
@@ -423,11 +424,9 @@ connection.onDefinition((params: DefinitionParams): LocationLink[] | null => {
 
 // ─── Semantic tokens ──────────────────────────────────────────────────────────
 //
-// For every step line in a feature file whose text matches a known step
-// definition, we emit a "stepResolved" semantic token covering the step text
-// (i.e. everything after the Given/When/Then keyword).  The VS Code theme will
-// colour it according to the scope mapping in package.json
-// (contributes.semanticTokenScopes → entity.name.function).
+// For every step line we emit two tokens (delta-encoded, in document order):
+//   1. "keyword" (index 1) — always, covering Given/When/Then/And/But
+//   2. "stepResolved" (index 0) — only when the step text matches a definition
 
 connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticTokens => {
   const doc = documents.get(params.textDocument.uri);
@@ -440,24 +439,26 @@ connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticT
   let prevLine = 0;
   let prevChar = 0;
 
+  const push = (line: number, char: number, length: number, type: number) => {
+    const deltaLine = line - prevLine;
+    const deltaChar = deltaLine === 0 ? char - prevChar : char;
+    data.push(deltaLine, deltaChar, length, type, 0);
+    prevLine = line;
+    prevChar = char;
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const parsed = parseStepLine(lines[i]);
     if (!parsed) continue;
 
+    // 1. Keyword token — always emitted
+    push(i, parsed.keywordStart, parsed.keyword.length, 1 /* keyword */);
+
+    // 2. stepResolved token — only for matched steps
     const match = resolveStep(parsed.text, stepDefinitions);
-    if (!match) continue;
-
-    // Semantic token data is delta-encoded: [Δline, Δchar, length, type, mods]
-    const deltaLine = i - prevLine;
-    // deltaChar is relative to the previous token only when on the same line
-    const deltaChar = deltaLine === 0
-      ? parsed.textStart - prevChar
-      : parsed.textStart;
-
-    data.push(deltaLine, deltaChar, parsed.text.length, 0 /* stepResolved */, 0);
-
-    prevLine = i;
-    prevChar = parsed.textStart;
+    if (match) {
+      push(i, parsed.textStart, parsed.text.length, 0 /* stepResolved */);
+    }
   }
 
   return { data };
