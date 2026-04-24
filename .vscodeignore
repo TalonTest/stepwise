@@ -1,0 +1,30 @@
+# Source and config not needed at runtime
+client/src/
+server/src/
+tests/
+.vscode/
+.git/
+.gitignore
+.vscodeignore
+
+# Build tooling
+node_modules/
+jest.config.js
+tsconfig.json
+tsconfig.test.json
+client/tsconfig.json
+server/tsconfig.json
+
+# Test files
+**/*.test.ts
+server/python/tests/
+
+# Source maps (optional — remove these two lines if you want maps for crash reports)
+out/**/*.map
+out/**/*.d.ts
+
+# Misc
+package-lock.json
+.pytest_cache/
+**/__pycache__/
+*.pyc

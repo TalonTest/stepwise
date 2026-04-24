@@ -3,13 +3,26 @@
   "displayName": "Stepwise — BDD/Gherkin Support",
   "description": "PyCharm-inspired BDD support for VS Code: diagnostics, go-to-definition, and completion for Gherkin feature files backed by pytest-bdd step definitions.",
   "version": "0.1.0",
-  "publisher": "stepwise",
+  "publisher": "talon-test",
   "engines": {
     "vscode": "^1.82.0"
   },
+  "repository": { "type": "git", "url": "https://github.com/TalonTest/stepwise" },
+  "bugs": { "url" : "https://github.com/TalonTest/stepwise/issues" },
+  "homepage" : "https://github.com/TalonTest/stepwise",
+  "license": "MIT",
   "categories": [
     "Programming Languages",
     "Linters"
+  ],
+  "keywords": [
+    "gherkin",
+    "bdd",
+    "pytest-bdd",
+    "cucumber",
+    "feature",
+    "testing",
+    "python"
   ],
   "activationEvents": [
     "onLanguage:gherkin"
