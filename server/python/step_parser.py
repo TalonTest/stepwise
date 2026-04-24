@@ -57,9 +57,6 @@ def _constant_string(node: ast.expr) -> Optional[str]:
     """Return the string value if *node* is a string constant, else None."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
-    # Python ≤ 3.7 used ast.Str
-    if isinstance(node, ast.Str):  # type: ignore[attr-defined]
-        return node.s  # type: ignore[attr-defined]
     return None
 
 
