@@ -56,6 +56,7 @@ const documents = new TextDocuments(TextDocument);
 
 let workspaceFolderPaths: string[] = [];
 let stepDefinitions: StepDefinition[] = [];
+let extensionPath: string | undefined;
 
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
@@ -172,7 +173,11 @@ function findPython(configured?: string): string {
 
 /** Absolute path to the bundled step_parser.py. */
 function getParserScriptPath(): string {
-  // Compiled output: out/server/server.js  →  ../../server/python/step_parser.py
+  if (extensionPath) {
+    return path.join(extensionPath, 'server', 'python', 'step_parser.py');
+  }
+  // Fallback for environments where extensionPath wasn't passed (e.g. tests).
+  // Compiled output lives at out/server/server.js, two levels up from the root.
   return path.join(__dirname, '..', '..', 'server', 'python', 'step_parser.py');
 }
 
@@ -323,6 +328,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   } else if (params.rootPath) {
     workspaceFolderPaths = [params.rootPath];
   }
+
+  // Extension root passed from the client — used to locate step_parser.py
+  // reliably regardless of how the output is structured.
+  extensionPath = params.initializationOptions?.extensionPath as string | undefined;
 
   supportsDynamicWatchers =
     !!params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration;

@@ -43,6 +43,9 @@ export function activate(context: vscode.ExtensionContext): void {
       ],
       configurationSection: 'stepwise',
     },
+    initializationOptions: {
+      extensionPath: context.extensionPath,
+    },
   };
 
   client = new LanguageClient(
