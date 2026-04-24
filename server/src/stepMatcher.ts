@@ -63,7 +63,12 @@ function escapeRegexLiteral(s: string): string {
  *
  * The resulting regex is anchored (^ … $) and case-insensitive.
  */
+const patternCache = new Map<string, RegExp>();
+
 export function patternToRegex(pattern: string): RegExp {
+  const cached = patternCache.get(pattern);
+  if (cached) return cached;
+
   // Split the pattern on every {placeholder} token.
   // The capturing group keeps the delimiters in the result array.
   const tokens = pattern.split(/(\{[^}]*\})/g);
@@ -90,7 +95,9 @@ export function patternToRegex(pattern: string): RegExp {
 
   // Case-insensitive so "Given" / "GIVEN" etc. don't matter at the call site,
   // but mostly we match step text which is already stripped of the keyword.
-  return new RegExp('^' + regexStr + '$', 'i');
+  const re = new RegExp('^' + regexStr + '$', 'i');
+  patternCache.set(pattern, re);
+  return re;
 }
 
 // ─── Step matching ─────────────────────────────────────────────────────────────

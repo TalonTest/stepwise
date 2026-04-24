@@ -134,6 +134,16 @@ describe('patternToRegex', () => {
     });
   });
 
+  describe('caching', () => {
+    it('returns the same RegExp instance for the same pattern', () => {
+      expect(patternToRegex('I have {n:d} items')).toBe(patternToRegex('I have {n:d} items'));
+    });
+
+    it('returns different instances for different patterns', () => {
+      expect(patternToRegex('step one')).not.toBe(patternToRegex('step two'));
+    });
+  });
+
   describe('multiple placeholders', () => {
     it('handles two typed placeholders', () => {
       const re = patternToRegex('{name:w} has {count:d} items');
