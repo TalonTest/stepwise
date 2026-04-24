@@ -156,6 +156,57 @@ export function parseStepLine(line: string): ParsedStep | null {
   };
 }
 
+// ─── Scenario Outline matching ────────────────────────────────────────────────
+
+const OUTLINE_PLACEHOLDER_RE = /<[^>]+>/g;
+
+/**
+ * Match a Scenario Outline step whose text contains `<placeholder>` tokens.
+ *
+ * Instead of testing the step text against each definition's compiled regex
+ * (which would fail because `<count>` doesn't look like `\d+`), we invert the
+ * direction: build a regex *from* the step text where every `<placeholder>`
+ * becomes `.+`, then test each definition's *pattern string* against it.
+ *
+ * Example:
+ *   stepText  = "I have <count> items in my cart"
+ *   fragments = ["I have ", " items in my cart"]
+ *   outlineRe = /^I have .+ items in my cart$/i
+ *   pattern   = "I have {count:d} items in my cart"  → matches ✓
+ */
+export function matchOutlineStep(
+  stepText: string,
+  definitions: StepDefinition[],
+): StepDefinition | undefined {
+  const fragments = stepText.split(OUTLINE_PLACEHOLDER_RE).map(escapeRegexLiteral);
+  // Need at least one placeholder for the join to produce a wildcard
+  if (fragments.length < 2) return undefined;
+  const outlineRe = new RegExp('^' + fragments.join('.+') + '$', 'i');
+
+  for (const def of definitions) {
+    if (outlineRe.test(def.pattern)) {
+      return def;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Match a step line against the known definitions, automatically choosing
+ * outline matching when the step text contains `<placeholder>` tokens.
+ */
+export function resolveStep(
+  stepText: string,
+  definitions: StepDefinition[],
+): StepDefinition | undefined {
+  if (OUTLINE_PLACEHOLDER_RE.test(stepText)) {
+    // Reset lastIndex after the stateful test() call on a /g regex
+    OUTLINE_PLACEHOLDER_RE.lastIndex = 0;
+    return matchOutlineStep(stepText, definitions);
+  }
+  return matchStep(stepText, definitions);
+}
+
 // ─── Completion helpers ────────────────────────────────────────────────────────
 
 /**

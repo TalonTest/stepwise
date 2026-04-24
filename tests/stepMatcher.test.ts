@@ -1,6 +1,8 @@
 import {
   patternToRegex,
   matchStep,
+  matchOutlineStep,
+  resolveStep,
   parseStepLine,
   filterDefinitions,
   StepDefinition,
@@ -251,6 +253,84 @@ describe('matchStep', () => {
     const good = def('I click the button');
     expect(() => matchStep('I click the button', [bad, good])).not.toThrow();
     expect(matchStep('I click the button', [bad, good])).toBe(good);
+  });
+});
+
+// ── matchOutlineStep ──────────────────────────────────────────────────────────
+
+describe('matchOutlineStep', () => {
+  it('matches a single <placeholder> against a typed parameter definition', () => {
+    const target = def('I have {count:d} items');
+    expect(matchOutlineStep('I have <count> items', [target])).toBe(target);
+  });
+
+  it('matches a single <placeholder> against an untyped parameter definition', () => {
+    const target = def('I have {item} in my cart');
+    expect(matchOutlineStep('I have <item> in my cart', [target])).toBe(target);
+  });
+
+  it('matches multiple <placeholders> in the same step', () => {
+    const target = def('{name} has {count:d} items');
+    expect(matchOutlineStep('<name> has <count> items', [target])).toBe(target);
+  });
+
+  it('matches a <placeholder> at the start of the step', () => {
+    const target = def('{name} is logged in');
+    expect(matchOutlineStep('<name> is logged in', [target])).toBe(target);
+  });
+
+  it('matches a <placeholder> at the end of the step', () => {
+    const target = def('the status is {status:w}');
+    expect(matchOutlineStep('the status is <status>', [target])).toBe(target);
+  });
+
+  it('returns undefined when the literal fragments do not match any definition', () => {
+    const target = def('I have {count:d} items');
+    expect(matchOutlineStep('I click <button>', [target])).toBeUndefined();
+  });
+
+  it('requires all literal fragments to match — partial match is not enough', () => {
+    const target = def('I have {count:d} items');
+    expect(matchOutlineStep('I had <count> items', [target])).toBeUndefined();
+  });
+
+  it('returns the first match when multiple definitions match', () => {
+    const first  = def('I have {count:d} items');
+    const second = def('I have {n} items');
+    expect(matchOutlineStep('I have <count> items', [first, second])).toBe(first);
+  });
+
+  it('returns undefined for an empty definition list', () => {
+    expect(matchOutlineStep('I have <count> items', [])).toBeUndefined();
+  });
+
+  it('returns undefined when called with a step that has no placeholders', () => {
+    const target = def('I have 5 items');
+    expect(matchOutlineStep('I have 5 items', [target])).toBeUndefined();
+  });
+});
+
+// ── resolveStep ───────────────────────────────────────────────────────────────
+
+describe('resolveStep', () => {
+  it('uses exact matching for steps without <placeholders>', () => {
+    const target = def('I click the button');
+    expect(resolveStep('I click the button', [target])).toBe(target);
+  });
+
+  it('uses outline matching when <placeholders> are present', () => {
+    const target = def('I have {count:d} items');
+    expect(resolveStep('I have <count> items', [target])).toBe(target);
+  });
+
+  it('returns undefined for an unmatched outline step', () => {
+    const target = def('I click the button');
+    expect(resolveStep('I have <count> items', [target])).toBeUndefined();
+  });
+
+  it('returns undefined for an unmatched exact step', () => {
+    const target = def('I hover over the button');
+    expect(resolveStep('I click the button', [target])).toBeUndefined();
   });
 });
 

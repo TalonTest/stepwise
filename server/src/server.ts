@@ -42,7 +42,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import {
   StepDefinition,
-  matchStep,
+  resolveStep,
   parseStepLine,
   filterDefinitions,
 } from './stepMatcher';
@@ -292,7 +292,7 @@ function validateDocument(doc: TextDocument): void {
     const parsed = parseStepLine(line);
     if (!parsed) continue;
 
-    const match = matchStep(parsed.text, stepDefinitions);
+    const match = resolveStep(parsed.text, stepDefinitions);
     if (!match) {
       const range: Range = {
         start: { line: i, character: parsed.keywordStart },
@@ -399,7 +399,7 @@ connection.onDefinition((params: DefinitionParams): LocationLink[] | null => {
   const parsed = parseStepLine(lineText);
   if (!parsed) return null;
 
-  const def = matchStep(parsed.text, stepDefinitions);
+  const def = resolveStep(parsed.text, stepDefinitions);
   if (!def) return null;
 
   // Highlight the entire step phrase (everything after the keyword) when
@@ -444,7 +444,7 @@ connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticT
     const parsed = parseStepLine(lines[i]);
     if (!parsed) continue;
 
-    const match = matchStep(parsed.text, stepDefinitions);
+    const match = resolveStep(parsed.text, stepDefinitions);
     if (!match) continue;
 
     // Semantic token data is delta-encoded: [Δline, Δchar, length, type, mods]
