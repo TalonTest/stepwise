@@ -2,14 +2,19 @@
   "name": "stepwise",
   "displayName": "StepWise — BDD/Gherkin Support",
   "description": "PyCharm-inspired BDD support for VS Code: diagnostics, go-to-definition, and completion for Gherkin feature files backed by pytest-bdd step definitions.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "talon-test",
   "engines": {
     "vscode": "^1.82.0"
   },
-  "repository": { "type": "git", "url": "https://github.com/TalonTest/stepwise" },
-  "bugs": { "url" : "https://github.com/TalonTest/stepwise/issues" },
-  "homepage" : "https://github.com/TalonTest/stepwise",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TalonTest/stepwise"
+  },
+  "bugs": {
+    "url": "https://github.com/TalonTest/stepwise/issues"
+  },
+  "homepage": "https://github.com/TalonTest/stepwise",
   "license": "MIT",
   "categories": [
     "Programming Languages",
@@ -23,9 +28,6 @@
     "feature",
     "testing",
     "python"
-  ],
-  "activationEvents": [
-    "onLanguage:gherkin"
   ],
   "main": "./out/client/extension.js",
   "contributes": {
@@ -81,9 +83,10 @@
     }
   },
   "scripts": {
-    "compile": "tsc -b",
-    "watch": "tsc -b -w",
-    "build": "npm run compile",
+    "compile": "node build.js",
+    "watch": "node build.js --watch",
+    "build": "node build.js",
+    "typecheck": "tsc --project client/tsconfig.json --noEmit && tsc --project server/tsconfig.json --noEmit",
     "clean": "rimraf out",
     "test": "jest",
     "test:watch": "jest --watch"
@@ -98,6 +101,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.82.0",
+    "esbuild": "^0.25.12",
     "jest": "^30.3.0",
     "rimraf": "^5.0.0",
     "ts-jest": "^29.4.9",
